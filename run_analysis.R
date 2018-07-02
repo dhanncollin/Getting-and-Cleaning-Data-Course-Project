@@ -1,69 +1,129 @@
-## Define the path where the data that will be used is located
-    pathdata <- file.path("./Module3Data", "UCI HAR Dataset")
-    files <- list.files(pathdata, recursive = TRUE)
+# Define the path where the data that will be used is located
+      pathdata <- file.path("./Module3Data", "UCI HAR Dataset")
 
-## Read data from the files into the variables
-    # Read the Activity Files
-    ActivityTest <- read.table(file.path(pathdata, "test", "Y_test.txt"), header = FALSE)
-    ActivityTrain <- read.table(file.path(pathdata, "train", "Y_train.txt"), header = FALSE)  
+# Creating and organizing the files
+    # Create list of Dataset files with file path
+      Datasets <- list.files(pathdata, pattern="txt", recursive=TRUE, full.names = TRUE)
 
-    # Read the Subject Files
-    SubjectTrain <- read.table(file.path(pathdata, "train", "subject_train.txt"), header = FALSE)
-    SubjectTest <- read.table(file.path(pathdata, "test", "subject_test.txt"), header = FALSE)  
+    # Remove the not needed files
+      Datasets <- Datasets[-(3:4)]
 
-    # Read the Features Files
-    FeaturesTest <- read.table(file.path(pathdata, "test", "x_test.txt"), header = FALSE)
-    FeaturesTrain <- read.table(file.path(pathdata, "train", "X_train.txt"), header = FALSE)  
+    # Also remove the "Inertial Signals"
+      Datasets <- Datasets[c(-(3:11),-(15:23))]
+
+    # Create list of dataset
+      datalist <- NULL
+        for (i in 1:length(Datasets)) {
+              datalist[[i]] <- read.table(Datasets[i])
+        }
+
+    # Create a filelist without full path for names of list
+      DatasetNames <- gsub(".txt", "", list.files(pathdata,pattern="txt", recursive=TRUE, full.names = FALSE))
+
+    # Remove the not needed files
+      DatasetNames <- DatasetNames[-(3:4)]
+
+    # Also remove the "Inertial Signals"
+      DatasetNames <- DatasetNames[c(-(3:11),-(15:23))]
+
+    # Create and set the list names
+      names(datalist) <- DatasetNames
 
 ## OBJECTIVE 1: Merges the training and the test sets to create one data set.
-    # Creating data tables by rows
-    Subject <- rbind(SubjectTrain, SubjectTest)
-    Activity <- rbind(ActivityTrain, ActivityTest)  
-    Features <- rbind(FeaturesTrain, FeaturesTest)  
 
-    # Setting the names of variables
-    names(Subject) <- c("subject")
-    names(Activity) <- c("activity") 
-    FeaturesNames <- read.table(file.path(pathdata, "features.txt"),head=FALSE)  
-    names(Features) <- FeaturesNames$V2  
+    # Load the needed packages
+      library(dplyr)
+      library(tidyr)
 
-    # Merge the test and train dataset into one dataframe
-    CombinedData <- cbind(Subject, Activity)
-    Data <- cbind(Features, CombinedData)  
+    # Read the test data 
+      dataset_test <- datalist$`test/X_test`
+      colnames(dataset_test) <- datalist$features[,2]
+
+    # Create a data frame for test data
+      dataset_test <- data.frame(subject = datalist$`test/subject_test`[,1],
+                           type = "test",
+                           label = datalist$`test/y_test`[,1],
+                           dataset_test,
+                           stringsAsFactors = FALSE)
+
+    # Organized data frame of test data
+      dataset_test2 <- dataset_test %>%
+                      as_data_frame %>%
+                      gather(key = features,value = value,-c(subject,type,label))
+
+    # Read the train data
+      dataset_train <- datalist$`train/X_train`
+      colnames(dataset_train) <- datalist$features[,2]
+
+    # Create a data frame for train data
+      dataset_train <- data.frame(subject = datalist$`train/subject_train`[,1],
+                            type = "train",
+                            label = datalist$`train/y_train`[,1],
+                            dataset_train,
+                            stringsAsFactors = FALSE)
+
+    # Organized data frame of train data
+      dataset_train2 <- dataset_train %>%
+                        as_data_frame %>%
+                        tidyr::gather(key = features,value = value,-c(subject,type,label))
+
+
+    # Merges the train and the test data 
+      Mergedataset <- NULL
+      merge_by <- names(dataset_test2)
+      Mergedataset <- dplyr::full_join(dataset_test2,dataset_train2,by=merge_by) %>%
+          arrange(subject)
+
+    # Read the Mergedataset
+      Mergedataset
 
 ## OBJECTIVE 2: Extracts only the measurements on the mean and standard deviation for each measurement.
-    # Subset features names by measurements on the mean and standard deviation
-    subFeaturesNames <- FeaturesNames$V2[grep("mean\\(\\)|std\\(\\)", FeaturesNames$V2)]
 
-    # Subset the CombinedData by selected names of features
-    selectedNames <- c(as.character(subFeaturesNames), "subject", "activity" )
+    # Filter the Mergedataset by measurements on the mean and standard deviation
+      dataset_mean_std <- Mergedataset %>%
+        filter(grepl("mean|std", Mergedataset$features))
 
+    # Read the dataset_mean_std
+      dataset_mean_std
+      
 ## OBJECTIVE 3: Uses descriptive activity names to name the activities in the data set.
-    # Read the activity names
-    activityLabels <- read.table(file.path(pathdata, "activity_labels.txt"), header = FALSE)
 
-    # Factorize variable "activity" in the data frame "Data" using descriptive names
-    Data$activity <- factor(Data$activity, labels = activityLabels[,2])
+    # Factorize the mergedataset and label
+      Mergedataset$label <- factor(Mergedataset$label)
 
-    # test print
-    head(Data$activity, 30)
+    # Factorize the mergedataset and label using the "activity_labels"
+      levels(Mergedataset$label) <- as.character(datalist$activity_labels$V2)
+
+    # Change to as.character
+      Mergedataset$label <- as.character(Mergedataset$label)
+
+    # Read the Mergedataset again  
+      Mergedataset
 
 ## OBJECTIVE 4: Appropriately labels the data set with descriptive variable names.
-    names(Data) <- gsub("^t", "time", names(Data))
-    names(Data) <- gsub("^f", "frequency", names(Data))  
-    names(Data) <- gsub("Acc", "Accelerometer", names(Data))  
-    names(Data) <- gsub("Gyro", "Gyroscope", names(Data))  
-    names(Data) <- gsub("Mag", "Magnitude", names(Data))  
-    names(Data) <- gsub("BodyBody", "Body", names(Data))  
 
-    # Check
-    names(Data)
+    # Set appropriately labels 
+      names(Mergedataset) <- c("ID","train/test","activity","features","value")
 
-## OBJECTIVE 5: From the data set in step 4, creates a second, independent tidy data set
-    ## with the average of each variable for each activity and each subject.
+      Mergedataset$features <- gsub("^t", "time", Mergedataset$features)
+      Mergedataset$features <- gsub("^f", "frequency", Mergedataset$features)  
+      Mergedataset$features <- gsub("Acc", "Accelerometer", Mergedataset$features)  
+      Mergedataset$features <- gsub("Gyro", "Gyroscope", Mergedataset$features)  
+      Mergedataset$features <- gsub("Mag", "Magnitude", Mergedataset$features)  
+      Mergedataset$features <- gsub("BodyBody", "Body", Mergedataset$features) 
 
-    # Load the "plyr" packages and create a new sataset. Then, used write.table to create a tidy data set.
-    library(plyr)
-    Data2 <- aggregate(. ~subject + activity, Data, mean)
-    Data2 <- Data2[order(Data2$subject,Data2$activity),]
-    write.table(Data2, file = "tidydata.txt", row.name=FALSE)
+    # Read the Mergedataset again  
+      Mergedataset
+
+## OBJECTIVE 5: From the data set in step 4, creates a second, independent tidy data set with the average of each variable for each activity and each subject.
+
+    # Create a tidy data of Mergedataset
+      Mergedataset2 <- Mergedataset %>%
+      group_by(ID,activity) %>%
+      summarize(Mean = mean(value))
+
+    # Read the Mergedataset2  
+      Mergedataset2
+
+    # Write table and create a "tidydata.txt"
+      write.table(Mergedataset2,"tidydata.txt",row.name=FALSE)
